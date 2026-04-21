@@ -2,7 +2,8 @@ import streamlit as st
 
 # Configurazione Accesso
 PASSWORD_CORRETTA = "Kart2024"
-LINK_LIVE_TIMING = "https://www.apex-timing.com/live-timing/index.html"
+LINK_LIVE_TIMING = LINK_LIVE_TIMING = "http://live.apex-timing.com/kartodromo106reverse/"
+
 
 st.set_page_config(page_title="Strategy Hub", page_icon="🏎️")
 st.title("Registrazione Strategy Hub")
