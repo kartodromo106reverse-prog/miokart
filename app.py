@@ -1,38 +1,100 @@
 import streamlit as st
+import pandas as pd
+import time
+import random
 
-# Configurazione Accesso
-PASSWORD_CORRETTA = "Kart2024"
-LINK_LIVE_TIMING = "https://www.apex-timing.com/live-timing/kartodromo106reverse"
+# Configurazione Pagina (Usa tutto lo schermo)
+st.set_page_config(page_title="Kart Strategy Pro", layout="wide")
 
-st.set_page_config(page_title="Strategy Hub", page_icon="🏎️")
+# Stile CSS per rendere la tabella gigante e leggibile come su Z Flip5
+st.markdown("""
+    <style>
+    .reportview-container .main .block-container{ padding-top: 1rem; }
+    .stButton>button { width: 100%; height: 3em; background-color: #ff4b4b; color: white; }
+    .big-font { font-size:20px !important; font-family: monospace; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Inizializzazione della sessione (La Memoria dell'app)
-if 'autenticato' not in st.session_state:
-    st.session_state.autenticato = False
+# --- LOGIN ---
+if 'auth' not in st.session_state:
+    st.session_state.auth = False
 
-st.title("Registrazione Strategy Hub")
+if not st.session_state.auth:
+    st.title("🏎️ War Room Login")
+    password = st.text_input("Inserisci Password Team", type="password")
+    if st.button("Entra"):
+        if password: # Qui puoi mettere una logica per password diverse
+            st.session_state.auth = True
+            st.rerun()
+    st.stop()
 
-# Se l'utente NON è ancora autenticato, mostra il modulo
-if not st.session_state.autenticato:
-    nome = st.text_input("Nome e Cognome")
-    kart_n = st.text_input("Numero Kart")
-    password_inserita = st.text_input("Codice Accesso Team", type="password")
+# --- LOGICA APP ---
+st.title("📊 Strategy Engine Live")
 
-    if st.button("ACCEDI ALLA TELEMETRIA"):
-        if not nome or not kart_n:
-            st.warning("Inserisci Nome e Numero Kart.")
-        elif password_inserita == PASSWORD_CORRETTA:
-            st.session_state.autenticato = True
-            st.session_state.nome_pilota = nome
-            st.rerun() # Ricarica l'app per mostrare il tasto
-        else:
-            st.error("Codice Accesso errato.")
+# Selezione Pista
+pista = st.selectbox("Seleziona Circuito", ["SOLE LUNA VITTORIA", "106 REVERSE", "106 STANDARD", "NAPOLI"])
 
-# Se l'utente È autenticato, mostra direttamente il tasto per i tempi
-else:
-    st.success(f"Bentornato, {st.session_state.nome_pilota}! Accesso attivo.")
-    st.link_button("CLICCA QUI PER I TEMPI LIVE 🏁", LINK_LIVE_TIMING)
+# Generazione Dati (Simulati per ogni team autonomo)
+if 'data' not in st.session_state:
+    df = pd.DataFrame({
+        'POS': range(1, 51),
+        'NOME': [f"KART {random.randint(1,99)}" for _ in range(50)],
+        'CAT': ["NONE"] * 50,
+        'GAP': [0.0] * 50,
+        'TEMPO': [46.0 + random.uniform(0, 5) for _ in range(50)],
+        'C': [0] * 50,
+        'STINT': [60] * 50
+    })
+    st.session_state.data = df
+
+# Funzione per simulare i tempi
+def update_times():
+    st.session_state.data['TEMPO'] = st.session_state.data['TEMPO'].apply(lambda x: max(44.0, x + random.uniform(-0.1, 0.1)))
+    st.session_state.data = st.session_state.data.sort_values(by='TEMPO').reset_index(drop=True)
+    st.session_state.data['POS'] = range(1, 51)
+    best = st.session_state.data['TEMPO'].min()
+    st.session_state.data['GAP'] = st.session_state.data['TEMPO'].apply(lambda x: f"+{x-best:.2f}" if x > best else "LEAD")
+
+# Visualizzazione Classifica
+update_times()
+
+# Tabella Professionale
+# Usiamo le colonne di Streamlit per spaziare
+cols = st.columns([1, 2, 2, 2, 2, 1, 1])
+fields = ["POS", "NOME", "CAT", "GAP", "TEMPO", "C", "STINT"]
+
+# Header
+for col, field in zip(cols, fields):
+    col.write(f"**{field}**")
+
+# Righe
+for i, row in st.session_state.data.iterrows():
+    c1, c2, c3, c4, c5, c6, c7 = st.columns([1, 2, 2, 2, 2, 1, 1])
+    c1.write(f"{row['POS']}")
     
-    if st.button("Esci / Cambia Pilota"):
-        st.session_state.autenticato = False
+    # Colore in base alla categoria
+    color = "#FFFFFF"
+    if row['CAT'] == "PRO": color = "#FF4444"
+    elif row['CAT'] == "SEMI": color = "#4444FF"
+    elif row['CAT'] == "GENT": color = "#44FF44"
+    
+    c2.markdown(f"<span style='color:{color}; font-weight:bold;'>{row['NOME']}</span>", unsafe_allow_html=True)
+    
+    # Bottone per cambiare categoria (Sottomenu)
+    if c3.button(f"{row['CAT']}", key=f"btn_{i}"):
+        cats = ["NONE", "PRO", "SEMI", "GENT"]
+        idx = cats.index(row['CAT'])
+        st.session_state.data.at[i, 'CAT'] = cats[(idx + 1) % 4]
         st.rerun()
+
+    c4.write(f"{row['GAP']}")
+    c5.write(f"{row['TEMPO']:.3f}")
+    c6.write(f"{row['C']}")
+    c7.write(f"{row['STINT']}m")
+
+if st.button("RESET TUTTE CATEGORIE"):
+    st.session_state.data['CAT'] = "NONE"
+    st.rerun()
+
+time.sleep(1)
+st.rerun()
