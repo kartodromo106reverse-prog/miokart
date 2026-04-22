@@ -2,153 +2,157 @@ import streamlit as st
 import pandas as pd
 import time
 import random
-import numpy as np
 
-# 1. SETUP - NON MODIFICARE
-st.set_page_config(page_title="WAR ROOM", layout="wide", initial_sidebar_state="collapsed")
+# 1. SETUP
+st.set_page_config(page_title="WAR ROOM PRO", layout="wide", initial_sidebar_state="collapsed")
 
-# 2. CSS: AGGIUNGIAMO SOLO LE LINEE DELLA GRIGLIA E FONT 10-12px
+# 2. CSS: GRIGLIA EXCEL E BOX GIGANTI
 st.markdown("""
     <style>
-    /* Manteniamo le tue tendine e menu, riduciamo solo i font dei dati */
-    .main .block-container { padding: 2px 5px !important; background-color: #000000; }
+    .main .block-container { padding: 0px !important; background-color: #000000; }
+    [data-testid="stVerticalBlock"] { gap: 0rem !important; }
     
-    /* Griglia stile Excel per le righe dei Kart */
-    .grid-container {
+    /* GRIGLIA EXCEL LIVE */
+    .grid-row {
         display: flex;
-        border-bottom: 1px solid #333; /* Linea orizzontale */
+        border-bottom: 2px solid #444; 
         align-items: center;
-        height: 26px;
+        background-color: #000;
+        min-height: 40px;
     }
     .grid-cell {
-        border-right: 1px solid #333; /* Linea verticale */
-        padding: 0px 4px;
+        border-right: 1px solid #444;
+        padding: 0px 8px;
         height: 100%;
         display: flex;
         align-items: center;
+        justify-content: center;
+    }
+
+    /* FONT GRANDI */
+    .big-num { font-size: 22px !important; font-weight: 900 !important; color: #FFFFFF; }
+    .box-timer { font-size: 24px !important; font-weight: bold; color: #FF3131; }
+    .box-team { font-size: 18px !important; color: #1E90FF; font-weight: bold; }
+
+    /* BOTTONI BOX GIGANTI */
+    .stButton>button {
+        background-color: #111 !important;
+        border: 1px solid #444 !important;
+        color: #FFFFFF !important;
+        font-size: 18px !important;
+        padding: 15px 10px !important;
+        height: auto !important;
+        width: 100% !important;
+        margin-bottom: 5px !important;
+        text-align: left !important;
     }
     
-    /* Font richiesti 10-12px */
-    .f-data { font-size: 12px; font-weight: bold; color: white; }
-    .f-label { font-size: 10px; color: #777; }
-    
-    /* Bottoni trasparenti per i nomi Team */
-    .stButton>button {
+    /* Tabella Live: Bottoni Team */
+    .live-team-btn > div > div > button {
         background: transparent !important;
         border: none !important;
-        color: #4488ff !important;
-        font-size: 11px !important;
+        color: #1E90FF !important;
+        font-size: 18px !important;
         text-align: left !important;
         padding: 0 !important;
-        height: 100% !important;
     }
-    
-    .t-pro { color: #FF3131; }
-    .t-semi { color: #1E90FF; }
-    .t-ama { color: #00FF7F; }
-    
+
     header, footer { visibility: hidden; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #111; padding: 5px; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. STATO DATI (Invariato)
+# 3. STATO DATI
 if 'data' not in st.session_state:
     st.session_state.data = pd.DataFrame({
-        'KART': [f"{i+1:02d}" for i in range(50)],
-        'TEAM': [f"TEAM {i+1}" for i in range(50)],
-        'CAT': ["NONE"] * 50, 'STAR': [False] * 50,
-        'ULTIMO': [0.0] * 50, 'MEDIA': [0.0] * 50,
-        'IN_PIT': [False] * 50, 'LANE': ["V"] * 50, 'PIT_START': [0.0] * 50
+        'KART': [f"{i+1:02d}" for i in range(40)],
+        'TEAM': [f"TEAM {i+1}" for i in range(40)],
+        'CAT': ["NONE"] * 40, 'STAR': [False] * 40,
+        'ULTIMO': [0.0] * 40, 'MEDIA': [0.0] * 40,
+        'IN_PIT': [False] * 40, 'LANE': ["V"] * 40, 'PIT_START': [0.0] * 40
     })
-if 'pista' not in st.session_state: st.session_state.pista = "Nome Pista"
-if 'rif' not in st.session_state: st.session_state.rif = 45.00
-if 'apex' not in st.session_state: st.session_state.apex = ""
+if 'apex_url' not in st.session_state: st.session_state.apex_url = ""
 if 'sel_idx' not in st.session_state: st.session_state.sel_idx = 0
 
-# --- SIDEBAR (I TUOI MENU - NON MODIFICATI) ---
+# --- SIDEBAR ---
 with st.sidebar:
-    st.header("⚙️ CONFIGURAZIONE")
-    st.session_state.pista = st.text_input("PISTA", st.session_state.pista)
-    st.session_state.rif = st.number_input("BEST RIF", value=st.session_state.rif)
-    st.session_state.apex = st.text_input("APEX LINK", st.session_state.apex)
+    st.header("🏁 CONFIG")
+    st.session_state.apex_url = st.text_input("URL APEX", st.session_state.apex_url)
     st.write("---")
     idx = st.session_state.sel_idx
-    st.subheader(f"EDIT K{st.session_state.data.at[idx, 'KART']}")
-    st.session_state.data.at[idx, 'TEAM'] = st.text_input("TEAM NAME", st.session_state.data.at[idx, 'TEAM'])
+    st.subheader(f"EDIT KART {st.session_state.data.at[idx, 'KART']}")
+    st.session_state.data.at[idx, 'TEAM'] = st.text_input("NOME TEAM", st.session_state.data.at[idx, 'TEAM'])
     if st.button("⭐ STELLA"): st.session_state.data.at[idx, 'STAR'] = not st.session_state.data.at[idx, 'STAR']; st.rerun()
-    st.session_state.data.at[idx, 'CAT'] = st.selectbox("CAT", ["NONE", "PRO", "SEMI", "AMA"], index=["NONE", "PRO", "SEMI", "AMA"].index(st.session_state.data.at[idx, 'CAT']))
     
     if not st.session_state.data.at[idx, 'IN_PIT']:
         c = st.columns(2)
-        if c[0].button("🟢 VERDE"): 
+        if c[0].button("🟢 V"): 
             st.session_state.data.at[idx, 'IN_PIT'], st.session_state.data.at[idx, 'LANE'], st.session_state.data.at[idx, 'PIT_START'] = True, "VERDE", time.time()
             st.rerun()
-        if c[1].button("🔴 ROSSO"): 
+        if c[1].button("🔴 R"): 
             st.session_state.data.at[idx, 'IN_PIT'], st.session_state.data.at[idx, 'LANE'], st.session_state.data.at[idx, 'PIT_START'] = True, "ROSSO", time.time()
             st.rerun()
     else:
-        if st.button("✅ TORNA IN PISTA"): st.session_state.data.at[idx, 'IN_PIT'] = False; st.rerun()
+        if st.button("✅ ESCI BOX"): st.session_state.data.at[idx, 'IN_PIT'] = False; st.rerun()
 
-# --- MAIN INTERFACE ---
-st.caption(f"📍 {st.session_state.pista} | Riferimento: {st.session_state.rif}s")
-tab1, tab2, tab3 = st.tabs(["🏎️ LIVE", "🚧 BOX", "🌐 APEX"])
+# --- INTERFACCIA ---
+tab_live, tab_box, tab_apex = st.tabs(["🏎️ LIVE", "🚧 BOX", "🌐 APEX"])
 
-with tab1:
-    # INTESTAZIONE GRIGLIA
+with tab_live:
+    # Header Excel
     st.markdown("""
-        <div class="grid-container" style="background-color: #111;">
-            <div class="grid-cell f-label" style="width: 10%;">K</div>
-            <div class="grid-cell f-label" style="width: 50%;">TEAM</div>
-            <div class="grid-cell f-label" style="width: 20%;">MEDIA</div>
-            <div class="grid-cell f-label" style="width: 20%; border-right: none;">ULT</div>
+        <div class="grid-row" style="background-color: #222;">
+            <div class="grid-cell" style="width: 15%; font-size: 12px;">K</div>
+            <div class="grid-cell" style="width: 45%; font-size: 12px;">TEAM</div>
+            <div class="grid-cell" style="width: 20%; font-size: 12px;">MEDIA</div>
+            <div class="grid-cell" style="width: 20%; border-right: none; font-size: 12px;">ULT</div>
         </div>
     """, unsafe_allow_html=True)
 
-    df = st.session_state.data[st.session_state.data['IN_PIT'] == False].copy()
-    # Simulazione rapida
-    for i in df.index:
-        st.session_state.data.at[i, 'ULTIMO'] = st.session_state.rif + random.uniform(0.1, 1.0)
-        st.session_state.data.at[i, 'MEDIA'] = st.session_state.rif + 0.2
-    
-    df_sorted = df.sort_values('MEDIA')
-
-    for i, row in df_sorted.iterrows():
-        cols = st.columns([0.4, 2, 0.8, 0.8])
+    df_pista = st.session_state.data[st.session_state.data['IN_PIT'] == False]
+    for i, row in df_pista.iterrows():
+        cols = st.columns([0.6, 2.0, 1.0, 1.0])
         star = "⭐" if row['STAR'] else ""
-        cat_c = f"t-{row['CAT'].lower()}"
-        
-        # Colonna Kart con bordo
-        with cols[0]:
-            st.markdown(f'<div class="grid-container"><div class="grid-cell f-data {cat_c}" style="width:100%; border-right:none;">{star}{row["KART"]}</div></div>', unsafe_allow_html=True)
-        # Colonna Team (Bottone) con bordo
+        with cols[0]: st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none;">{star}{row["KART"]}</div></div>', unsafe_allow_html=True)
         with cols[1]:
-            if st.button(f"{row['TEAM']}", key=f"t_{i}"):
+            st.markdown('<div class="live-team-btn">', unsafe_allow_html=True)
+            if st.button(f"{row['TEAM']}", key=f"btn_{i}"):
                 st.session_state.sel_idx = i
                 st.rerun()
-        # Colonna Media con bordo
-        with cols[2]:
-            st.markdown(f'<div class="grid-container"><div class="grid-cell f-data" style="width:100%; border-right:none; justify-content:flex-end;">{row["MEDIA"]:.2f}</div></div>', unsafe_allow_html=True)
-        # Colonna Ultimo
-        with cols[3]:
-            st.markdown(f'<div class="grid-container"><div class="grid-cell f-data" style="width:100%; border-right:none; justify-content:flex-end; color:#777;">{row["ULTIMO"]:.1f}</div></div>', unsafe_allow_html=True)
-        
-        # Linea di chiusura orizzontale
-        st.markdown('<div style="border-bottom: 1px solid #333; margin-top:-1px;"></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        with cols[2]: st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none; color:#00FF7F;">{row["MEDIA"]:.2f}</div></div>', unsafe_allow_html=True)
+        with cols[3]: st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none; color:#777;">{row["ULTIMO"]:.1f}</div></div>', unsafe_allow_html=True)
 
-with tab2:
-    for lane in ["VERDE", "ROSSO"]:
-        st.markdown(f"<div style='font-size:10px; color:#555; margin-top:5px;'>CORSIA {lane}</div>", unsafe_allow_html=True)
-        q = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == lane)]
-        for idx, r in q.iterrows():
-            rem = max(0, 180 - (time.time() - r['PIT_START']))
+with tab_box:
+    col_v, col_r = st.columns(2)
+    with col_v:
+        st.markdown("<h3 style='color:green; font-size:15px; text-align:center;'>🟢 CORSIA VERDE</h3>", unsafe_allow_html=True)
+        q_v = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == "VERDE")]
+        for idx, r in q_v.iterrows():
+            elapsed = time.time() - r['PIT_START']
+            rem = max(0, 180 - elapsed)
             m, s = divmod(int(rem), 60)
-            if st.button(f"K{r['KART']} - {r['TEAM']} | ⏳ {m:02d}:{s:02d}", key=f"box_{idx}"):
+            # Bottone GIGANTE per il BOX
+            if st.button(f"K{r['KART']} - {r['TEAM']}\n⏳ {m:02d}:{s:02d}", key=f"bx_{idx}"):
                 st.session_state.sel_idx = idx
                 st.rerun()
 
-with tab3:
-    if st.session_state.apex:
-        st.markdown(f'<iframe src="{st.session_state.apex}" width="100%" height="600px"></iframe>', unsafe_allow_html=True)
+    with col_r:
+        st.markdown("<h3 style='color:red; font-size:15px; text-align:center;'>🔴 CORSIA ROSSA</h3>", unsafe_allow_html=True)
+        q_r = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == "ROSSO")]
+        for idx, r in q_r.iterrows():
+            elapsed = time.time() - r['PIT_START']
+            rem = max(0, 180 - elapsed)
+            m, s = divmod(int(rem), 60)
+            if st.button(f"K{r['KART']} - {r['TEAM']}\n⏳ {m:02d}:{s:02d}", key=f"bxr_{idx}"):
+                st.session_state.sel_idx = idx
+                st.rerun()
 
-time.sleep(10)
+with tab_apex:
+    if st.session_state.apex_url:
+        st.markdown(f'<iframe src="{st.session_state.apex_url}" width="100%" height="1000px" style="border:none;"></iframe>', unsafe_allow_html=True)
+    else:
+        st.info("Incolla l'URL Apex nella Sidebar.")
+
+time.sleep(5) # Refresh più veloce per i box
 st.rerun()
