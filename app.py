@@ -1,4 +1,4 @@
-import streamlit as st
+t streamlit as st
 import pandas as pd
 import time
 import random
@@ -155,4 +155,4 @@ with tab_apex:
         st.info("Incolla l'URL Apex nella Sidebar.")
 
 time.sleep(5) # Refresh più veloce per i box
-st.rerun()
+st.rerun
