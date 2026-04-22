@@ -1,158 +1,149 @@
-t streamlit as st
+import streamlit as st
 import pandas as pd
 import time
-import random
 
-# 1. SETUP
-st.set_page_config(page_title="WAR ROOM PRO", layout="wide", initial_sidebar_state="collapsed")
+# 1. SETUP - LAYOUT OTALE
+st.set_page_config(page_title="WAR ROOM - 4 LANES PRO", layout="wide", initial_sidebar_state="collapsed")
 
-# 2. CSS: GRIGLIA EXCEL E BOX GIGANTI
+# 2. CSS: GRAFICA PULITA E LINEE PIXEL PERFECT
 st.markdown("""
     <style>
-    .main .block-container { padding: 0px !important; background-color: #000000; }
+    .main .block-container { padding: 0px !important; background-color: #000; }
     [data-testid="stVerticalBlock"] { gap: 0rem !important; }
     
-    /* GRIGLIA EXCEL LIVE */
-    .grid-row {
-        display: flex;
-        border-bottom: 2px solid #444; 
-        align-items: center;
-        background-color: #000;
-        min-height: 40px;
+    /* GRIGLIA EXCEL PROFESSIONALE */
+    .grid-row { 
+        display: flex; 
+        border-bottom: 1px solid #333; 
+        align-items: center; 
+        min-height: 50px; 
+        background-color: #000; 
     }
-    .grid-cell {
-        border-right: 1px solid #444;
-        padding: 0px 8px;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    /* FONT GRANDI */
-    .big-num { font-size: 22px !important; font-weight: 900 !important; color: #FFFFFF; }
-    .box-timer { font-size: 24px !important; font-weight: bold; color: #FF3131; }
-    .box-team { font-size: 18px !important; color: #1E90FF; font-weight: bold; }
-
-    /* BOTTONI BOX GIGANTI */
-    .stButton>button {
-        background-color: #111 !important;
-        border: 1px solid #444 !important;
-        color: #FFFFFF !important;
-        font-size: 18px !important;
-        padding: 15px 10px !important;
-        height: auto !important;
-        width: 100% !important;
-        margin-bottom: 5px !important;
-        text-align: left !important;
+    .grid-cell { 
+        border-right: 1px solid #333; 
+        padding: 0px 10px; 
+        height: 100%; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
     }
     
-    /* Tabella Live: Bottoni Team */
-    .live-team-btn > div > div > button {
-        background: transparent !important;
-        border: none !important;
-        color: #1E90FF !important;
+    /* TESTO GIGANTE */
+    .big-num { font-size: 26px !important; font-weight: 800 !important; color: #FFF; }
+    .star-icon { color: #FFD700; margin-right: 5px; font-size: 20px; }
+
+    /* BOTTONI BOX GIGANTI E PULITI */
+    .stButton>button {
+        border-radius: 8px !important;
+        padding: 20px 5px !important;
         font-size: 18px !important;
-        text-align: left !important;
-        padding: 0 !important;
+        font-weight: bold !important;
+        width: 100% !important;
+        margin-bottom: 10px !important;
+        color: white !important;
     }
+    
+    /* Bordi Corsie */
+    .btn-verde > div > button { border: 3px solid #28a745 !important; background-color: #0a2b12 !important; }
+    .btn-rossa > div > button { border: 3px solid #dc3545 !important; background-color: #2b0a0a !important; }
+    .btn-gialla > div > button { border: 3px solid #ffc107 !important; background-color: #332b00 !important; color: #ffc107 !important; }
+    .btn-blu > div > button { border: 3px solid #007bff !important; background-color: #001a33 !important; }
 
     header, footer { visibility: hidden; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #111; padding: 5px; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #111; padding: 10px; border-bottom: 1px solid #333; }
     </style>
     """, unsafe_allow_html=True)
 
 # 3. STATO DATI
 if 'data' not in st.session_state:
     st.session_state.data = pd.DataFrame({
-        'KART': [f"{i+1:02d}" for i in range(40)],
-        'TEAM': [f"TEAM {i+1}" for i in range(40)],
-        'CAT': ["NONE"] * 40, 'STAR': [False] * 40,
-        'ULTIMO': [0.0] * 40, 'MEDIA': [0.0] * 40,
-        'IN_PIT': [False] * 40, 'LANE': ["V"] * 40, 'PIT_START': [0.0] * 40
+        'KART': [f"{i+1:02d}" for i in range(50)],
+        'TEAM': [f"TEAM {i+1}" for i in range(50)],
+        'CAT': ["NONE"] * 50, 'STAR': [False] * 50,
+        'IN_PIT': [False] * 50, 'LANE': ["VERDE"] * 50, 'PIT_START': [0.0] * 50,
+        'MEDIA': [0.0] * 50, 'ULTIMO': [0.0] * 50
     })
-if 'apex_url' not in st.session_state: st.session_state.apex_url = ""
+
+if 'tempo_pit' not in st.session_state: st.session_state.tempo_pit = 180
+if 'corsie_attive' not in st.session_state: st.session_state.corsie_attive = ["VERDE", "ROSSA"]
 if 'sel_idx' not in st.session_state: st.session_state.sel_idx = 0
 
-# --- SIDEBAR ---
+# --- SIDEBAR: CONTROLLO MANUALE ---
 with st.sidebar:
-    st.header("🏁 CONFIG")
-    st.session_state.apex_url = st.text_input("URL APEX", st.session_state.apex_url)
+    st.header("⚙️ CONFIG PISTA")
+    st.session_state.tempo_pit = st.number_input("SECONDI PIT STOP", value=st.session_state.tempo_pit)
+    st.session_state.corsie_attive = st.multiselect("ATTIVA CORSIE", ["VERDE", "ROSSA", "GIALLA", "BLU"], default=st.session_state.corsie_attive)
+    
     st.write("---")
     idx = st.session_state.sel_idx
-    st.subheader(f"EDIT KART {st.session_state.data.at[idx, 'KART']}")
-    st.session_state.data.at[idx, 'TEAM'] = st.text_input("NOME TEAM", st.session_state.data.at[idx, 'TEAM'])
-    if st.button("⭐ STELLA"): st.session_state.data.at[idx, 'STAR'] = not st.session_state.data.at[idx, 'STAR']; st.rerun()
+    row = st.session_state.data.iloc[idx]
+    st.subheader(f"EDIT K{row['KART']}")
+    st.session_state.data.at[idx, 'TEAM'] = st.text_input("NOME TEAM", row['TEAM'])
     
-    if not st.session_state.data.at[idx, 'IN_PIT']:
-        c = st.columns(2)
-        if c[0].button("🟢 V"): 
-            st.session_state.data.at[idx, 'IN_PIT'], st.session_state.data.at[idx, 'LANE'], st.session_state.data.at[idx, 'PIT_START'] = True, "VERDE", time.time()
-            st.rerun()
-        if c[1].button("🔴 R"): 
-            st.session_state.data.at[idx, 'IN_PIT'], st.session_state.data.at[idx, 'LANE'], st.session_state.data.at[idx, 'PIT_START'] = True, "ROSSO", time.time()
-            st.rerun()
+    if st.button("⭐ STELLA (ON/OFF)"):
+        st.session_state.data.at[idx, 'STAR'] = not row['STAR']; st.rerun()
+    
+    cat = st.selectbox("CATEGORIA", ["NONE", "PRO", "SEMI", "AMA"])
+    st.session_state.data.at[idx, 'CAT'] = cat
+
+    st.write("---")
+    if not row['IN_PIT']:
+        st.write("MANDA IN BOX:")
+        for c_name in st.session_state.corsie_attive:
+            if st.button(f"➡️ {c_name}"):
+                st.session_state.data.at[idx, 'IN_PIT'], st.session_state.data.at[idx, 'LANE'], st.session_state.data.at[idx, 'PIT_START'] = True, c_name, time.time()
+                st.rerun()
     else:
-        if st.button("✅ ESCI BOX"): st.session_state.data.at[idx, 'IN_PIT'] = False; st.rerun()
+        if st.button("✅ LIBERA KART", type="primary"):
+            st.session_state.data.at[idx, 'IN_PIT'] = False; st.rerun()
 
 # --- INTERFACCIA ---
-tab_live, tab_box, tab_apex = st.tabs(["🏎️ LIVE", "🚧 BOX", "🌐 APEX"])
+tab1, tab2 = st.tabs(["🏎️ LIVE PISTA", "🚧 BOX LIVE"])
 
-with tab_live:
-    # Header Excel
-    st.markdown("""
-        <div class="grid-row" style="background-color: #222;">
-            <div class="grid-cell" style="width: 15%; font-size: 12px;">K</div>
-            <div class="grid-cell" style="width: 45%; font-size: 12px;">TEAM</div>
-            <div class="grid-cell" style="width: 20%; font-size: 12px;">MEDIA</div>
-            <div class="grid-cell" style="width: 20%; border-right: none; font-size: 12px;">ULT</div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    df_pista = st.session_state.data[st.session_state.data['IN_PIT'] == False]
-    for i, row in df_pista.iterrows():
-        cols = st.columns([0.6, 2.0, 1.0, 1.0])
-        star = "⭐" if row['STAR'] else ""
-        with cols[0]: st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none;">{star}{row["KART"]}</div></div>', unsafe_allow_html=True)
+with tab1:
+    # Header Tabella
+    st.markdown("""<div class="grid-row" style="background-color:#111; border-bottom: 2px solid #555;">
+        <div class="grid-cell" style="width:15%; font-size:12px; color:#888;">KART</div>
+        <div class="grid-cell" style="width:45%; font-size:12px; color:#888;">TEAM / CATEGORIA</div>
+        <div class="grid-cell" style="width:20%; font-size:12px; color:#888;">MEDIA</div>
+        <div class="grid-cell" style="width:20%; border-right:none; font-size:12px; color:#888;">ULTIMO</div>
+    </div>""", unsafe_allow_html=True)
+    
+    df_p = st.session_state.data[st.session_state.data['IN_PIT'] == False]
+    for i, r in df_p.iterrows():
+        cols = st.columns([0.6, 2, 1, 1])
+        star = "⭐" if r['STAR'] else ""
+        dot_color = {"PRO":"#FF3131","SEMI":"#1E90FF","AMA":"#00FF7F","NONE":"#444"}[r['CAT']]
+        
+        with cols[0]: 
+            st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none;">{star}{r["KART"]}</div></div>', unsafe_allow_html=True)
         with cols[1]:
-            st.markdown('<div class="live-team-btn">', unsafe_allow_html=True)
-            if st.button(f"{row['TEAM']}", key=f"btn_{i}"):
-                st.session_state.sel_idx = i
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-        with cols[2]: st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none; color:#00FF7F;">{row["MEDIA"]:.2f}</div></div>', unsafe_allow_html=True)
-        with cols[3]: st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none; color:#777;">{row["ULTIMO"]:.1f}</div></div>', unsafe_allow_html=True)
+            if st.button(f"● {r['TEAM']} ({r['CAT']})", key=f"t_{i}"):
+                st.session_state.sel_idx = i; st.rerun()
+        with cols[2]: 
+            st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none; color:#00FF7F;">{r["MEDIA"]:.2f}</div></div>', unsafe_allow_html=True)
+        with cols[3]: 
+            st.markdown(f'<div class="grid-row"><div class="grid-cell big-num" style="width:100%; border-right:none; color:#777;">{r["ULTIMO"]:.1f}</div></div>', unsafe_allow_html=True)
 
-with tab_box:
-    col_v, col_r = st.columns(2)
-    with col_v:
-        st.markdown("<h3 style='color:green; font-size:15px; text-align:center;'>🟢 CORSIA VERDE</h3>", unsafe_allow_html=True)
-        q_v = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == "VERDE")]
-        for idx, r in q_v.iterrows():
-            elapsed = time.time() - r['PIT_START']
-            rem = max(0, 180 - elapsed)
-            m, s = divmod(int(rem), 60)
-            # Bottone GIGANTE per il BOX
-            if st.button(f"K{r['KART']} - {r['TEAM']}\n⏳ {m:02d}:{s:02d}", key=f"bx_{idx}"):
-                st.session_state.sel_idx = idx
-                st.rerun()
+with tab2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    n_corsie = len(st.session_state.corsie_attive)
+    if n_corsie > 0:
+        cols_box = st.columns(n_corsie)
+        for i, c_name in enumerate(st.session_state.corsie_attive):
+            with cols_box[i]:
+                c_color = {"VERDE":"#28a745","ROSSA":"#dc3545","GIALLA":"#ffc107","BLU":"#007bff"}[c_name]
+                css_c = {"VERDE":"btn-verde","ROSSA":"btn-rossa","GIALLA":"btn-gialla","BLU":"btn-blu"}[c_name]
+                st.markdown(f"<h3 style='color:{c_color}; text-align:center; border-bottom: 2px solid {c_color}; padding-bottom:5px;'>{c_name}</h3>", unsafe_allow_html=True)
+                
+                q = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == c_name)]
+                for idx, r in q.iterrows():
+                    rem = max(0, st.session_state.tempo_pit - (time.time() - r['PIT_START']))
+                    m, s = divmod(int(rem), 60)
+                    st.markdown(f'<div class="{css_c}">', unsafe_allow_html=True)
+                    if st.button(f"K{r['KART']}\n⏳ {m:02d}:{s:02d}", key=f"bx_{idx}"):
+                        st.session_state.data.at[idx, 'IN_PIT'] = False; st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_r:
-        st.markdown("<h3 style='color:red; font-size:15px; text-align:center;'>🔴 CORSIA ROSSA</h3>", unsafe_allow_html=True)
-        q_r = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == "ROSSO")]
-        for idx, r in q_r.iterrows():
-            elapsed = time.time() - r['PIT_START']
-            rem = max(0, 180 - elapsed)
-            m, s = divmod(int(rem), 60)
-            if st.button(f"K{r['KART']} - {r['TEAM']}\n⏳ {m:02d}:{s:02d}", key=f"bxr_{idx}"):
-                st.session_state.sel_idx = idx
-                st.rerun()
-
-with tab_apex:
-    if st.session_state.apex_url:
-        st.markdown(f'<iframe src="{st.session_state.apex_url}" width="100%" height="1000px" style="border:none;"></iframe>', unsafe_allow_html=True)
-    else:
-        st.info("Incolla l'URL Apex nella Sidebar.")
-
-time.sleep(5) # Refresh più veloce per i box
-st.rerun
+time.sleep(5)
+st.rerun()
