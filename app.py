@@ -2,42 +2,34 @@ import streamlit as st
 import pandas as pd
 import time
 
-# 1. SETUP - LAYOUT
-st.set_page_config(page_title="War Room 106 Pro", layout="wide")
+# 1. SETUP E STRUTTURA (Invariata)
+st.set_page_config(page_title="War Room 106 Endurance", layout="wide")
 
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
-    /* Tasto APEX Gigante */
     .stLinkButton>a { 
         width: 100% !important; height: 70px !important; display: flex !important; 
         align-items: center !important; justify-content: center !important; 
         font-size: 20px !important; background-color: #ff4b4b !important; 
         color: white !important; font-weight: bold !important; border-radius: 12px !important;
-        text-decoration: none !important; margin-bottom: 15px !important;
+        text-decoration: none !important;
     }
-    /* Schede Statistiche Veloci */
-    .stat-card {
-        background-color: #1e2129; border-left: 6px solid #ff4b4b;
-        padding: 10px; border-radius: 8px; margin-bottom: 8px;
-    }
-    .stat-number { font-size: 20px; font-weight: bold; color: white; }
-    .stat-time { font-size: 18px; color: #ff4b4b; font-weight: bold; float: right; }
-    /* Box Timer */
-    .box-card {
-        background-color: #262730; border-top: 4px solid #ff4b4b;
-        padding: 10px; border-radius: 5px; margin-bottom: 5px; text-align: center;
-    }
+    /* Countdown Styling */
+    .timer-ok { color: #00FF7F; font-weight: bold; font-size: 22px; }
+    .timer-wait { color: #FF3131; font-weight: bold; font-size: 22px; }
+    .record-box { background-color: #1e2129; border-left: 5px solid #ff4b4b; padding: 10px; border-radius: 8px; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🏎️ War Room 106 - Statistiche & Box")
+# 2. TASTO APEX (Invariato)
+st.link_button("🚀 APRI LIVE TIMING APEX", "https://live.apex-timing.com/kartodromo106reverse/")
 
-# 2. LINK APEX FISSO
-apex_link = "https://live.apex-timing.com/kartodromo106reverse/"
-st.link_button("🚀 APRI LIVE TIMING APEX", apex_link)
+# 3. NUOVA LOGICA: TARGET TIME
+st.subheader("🎯 Obiettivo della Sessione")
+target_time = st.number_input("Tempo da monitorare (sec):", value=43.500, format="%.3f")
 
-# 3. GESTIONE DATI DINAMICA
+# 4. TABELLA GESTIONE (Aggiornata con Pit Stop)
 if 'data' not in st.session_state:
     st.session_state.data = pd.DataFrame({
         'KART': [f"{i+1:02d}" for i in range(15)],
@@ -46,71 +38,56 @@ if 'data' not in st.session_state:
         'PIT_START': [0.0] * 15
     })
 
-# 4. TABELLA OPERATIVA (Inserimento Dati)
-st.subheader("⏱️ Gestione Live (Pista e Box)")
-st.caption("Usa 'IN_PIT' per mandare un kart ai box e far partire il timer")
-
 edited_df = st.data_editor(
     st.session_state.data,
     column_config={
-        "KART": st.column_config.TextColumn("N° KART", width="small"),
+        "KART": st.column_config.TextColumn("N° KART", disabled=True),
         "BEST": st.column_config.NumberColumn("MIGLIOR GIRO", format="%.3f"),
-        "IN_PIT": st.column_config.CheckboxColumn("AI BOX?"),
+        "IN_PIT": st.column_config.CheckboxColumn("BOX (3 MIN)"),
     },
     hide_index=True,
-    use_container_width=True,
-    num_rows="dynamic"
+    use_container_width=True
 )
 
-# Logica per salvare i tempi di inizio Pit
+# Calcolo automatico entrata box
 for i in range(len(edited_df)):
     if edited_df.at[i, 'IN_PIT'] and not st.session_state.data.at[i, 'IN_PIT']:
         edited_df.at[i, 'PIT_START'] = time.time()
+    if not edited_df.at[i, 'IN_PIT']:
+        edited_df.at[i, 'PIT_START'] = 0.0
 
-if st.button("💾 AGGIORNA TUTTO"):
+if st.button("💾 AGGIORNA E CALCOLA"):
     st.session_state.data = edited_df
     st.rerun()
 
-# 5. VISUALIZZAZIONE DOPPIA: STATISTICHE + BOX
+# 5. STATISTICHE E COUNTDOWN
 st.divider()
-col_stats, col_box = st.columns(2)
+col_stats, col_timer = st.columns(2)
 
 with col_stats:
-    st.subheader("🌟 I Più Veloci")
-    # Filtra chi è in pista (non ai box) e ha un tempo valido
-    classifica = edited_df[(edited_df['BEST'] < 99) & (edited_df['IN_PIT'] == False)].sort_values('BEST').head(5)
-    
-    if not classifica.empty:
-        tempo_record = classifica['BEST'].min()
-        for i, row in classifica.iterrows():
-            icona = "⭐" if row['BEST'] == tempo_record else "🏁"
-            st.markdown(f"""
-                <div class='stat-card'>
-                    <span class='stat-number'>{icona} KART {row['KART']}</span>
-                    <span class='stat-time'>{row['BEST']:.3f}s</span>
-                </div>
-            """, unsafe_allow_html=True)
+    st.subheader("🌟 Radar Kart Veloci")
+    # Mostra solo i kart sotto il target
+    veloci = edited_df[edited_df['BEST'] <= target_time].sort_values('BEST')
+    if not veloci.empty:
+        for _, row in veloci.iterrows():
+            st.markdown(f"<div class='record-box'><b>KART {row['KART']}</b>: {row['BEST']:.3f}s</div>", unsafe_allow_html=True)
     else:
-        st.write("Inserisci i tempi per vedere la statistica.")
+        st.write("Nessun kart sotto la soglia.")
 
-with col_box:
-    st.subheader("🚧 Monitor Box")
-    # Filtra solo chi è ai box
-    box_karts = edited_df[edited_df['IN_PIT'] == True]
-    
-    if not box_karts.empty:
-        for i, row in box_karts.iterrows():
-            elapsed = time.time() - row['PIT_START']
-            mins, secs = divmod(int(elapsed), 60)
-            st.markdown(f"""
-                <div class='box-card'>
-                    <b style='color:#ff4b4b;'>KART {row['KART']}</b><br>
-                    <span>Fermo da: {mins:02d}:{secs:02d}</span>
-                </div>
-            """, unsafe_allow_html=True)
+with col_timer:
+    st.subheader("🚧 Countdown Pit Stop")
+    pit_karts = edited_df[edited_df['IN_PIT'] == True]
+    if not pit_karts.empty:
+        for _, row in pit_karts.iterrows():
+            rimanente = 180 - (time.time() - row['PIT_START'])
+            if rimanente > 0:
+                m, s = divmod(int(rimanente), 60)
+                st.markdown(f"KART **{row['KART']}**: <span class='timer-wait'>ATTENDERE {m:02d}:{s:02d}</span>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"KART **{row['KART']}**: <span class='timer-ok'>✅ PUÒ USCIRE!</span>", unsafe_allow_html=True)
     else:
         st.write("Nessun kart ai box.")
 
-# Refresh automatico ogni 15 secondi per aggiornare i timer dei box
-time.sleep(15)
+# Refresh automatico ogni 10 secondi per il timer
+time.sleep(10)
 st.rerun()
