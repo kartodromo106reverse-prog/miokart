@@ -25,7 +25,7 @@ st.title("🏎️ War Room Kart - Live Stats")
 # --- SEZIONE APEX ---
 st.subheader("Live Timing Apex")
 # Sostituisci l'URL qui sotto con il tuo link Apex reale se diverso
-apex_url = https://www.apex-timing.com/live-timing/kartodromo106/index.html 
+apex_url = "https://www.apex-timing.com/live-timing/kartodromo106/index.html" 
 components.iframe(apex_url, height=500, scrolling=True)
 
 # --- LOGICA DATI ---
