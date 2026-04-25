@@ -1,39 +1,3 @@
-import streamlit as st
-import pandas as pd
-import time
-
-# ==========================================
-# 1. CONFIGURAZIONE CORE E PERSISTENZA DATI
-# ==========================================
-st.set_page_config(
-    page_title="WAR ROOM 106 - v.COMPLETE", 
-    layout="wide", 
-    initial_sidebar_state="expanded"
-)
-
-# Inizializzazione Session State per non perdere i dati al refresh
-if 'data' not in st.session_state:
-    st.session_state.data = pd.DataFrame({
-        'KART': [f"{i+1:02d}" for i in range(50)],
-        'CATEGORIA': ['PRO' if i < 25 else 'GENTLEMAN' for i in range(50)],
-        'BEST': ["99.999"] * 50,
-        'CAMBI': [0] * 50,
-        'IN_PIT': [False] * 50,
-        'PIT_START': [0.0] * 50,
-        'PISTA_START': [time.time()] * 50
-    })
-
-# ==========================================
-# 2. STILE CSS (ALERT LUMINOSI E TOUCH)
-# ==========================================
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; }
-    .stButton>button { width: 100%; height: 85px; font-size: 26px !important; font-weight: bold; border-radius: 20px; background-color: #ff4b4b !important; color: white; border: 2px solid white; }
-    /* Timer Alert Lampeggiante */
-    .timer-red { color: #ff4b4b; font-size: 55px; font-weight: bold; animation: blinker 1s linear infinite; background: black; padding: 15px; border-radius: 15px; text-align: center; border: 3px solid #ff4b4b; }
-    .timer-green { color: #00FF7F; font-size: 55px; font-weight: bold; text-align: center; border: 5px solid #00FF7F; background: black; padding: 15px; border-radius: 15px; }
-    @keyframes blinker { 50% { opacity: 0.2; } }
     /* Ingrandimento tabelle per dita grandi */
     [data-testid="stDataEditor"] div div div div { line-height: 55px !important; font-size: 24px !important; }
     </style>
