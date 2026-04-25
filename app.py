@@ -15,6 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# --- CSS ORIGINALE ---
 st.markdown(
     """
     <style>
@@ -109,6 +110,52 @@ def parse_apex_live_karts(payload):
             payload.get("classification") or payload.get("entries") or payload.get("data") or []
         )
     else: candidates = []
-    
     if not isinstance(candidates, list): return []
     live = []
+    for pos, item in enumerate(candidates, start=1):
+        if not isinstance(item, dict): continue
+        kart = _safe_kart(item.get("kart") or item.get("kartNumber") or item.get("number") or item.get("vehicleNumber") or item.get("transponder") or item.get("name"))
+        lap = _safe_float(item.get("lastLap") or item.get("last_lap") or item.get("lapTime") or item.get("bestLap") or item.get("best_lap") or item.get("time"))
+        rank = item.get("position") or item.get("pos") or pos
+        if not kart or lap is None: continue
+        live.append({"KART": kart, "TIME": lap, "POS": int(rank)})
+    live.sort(key=lambda x: (x["POS"], x["TIME"]))
+    return live
+
+def resolve_apex_feed_url():
+    api_url = str(st.session_state.apex_api_url).strip()
+    if api_url: return api_url
+    live_url = str(st.session_state.apex_url).strip().lower()
+    if live_url and (".json" in live_url or "/api/" in live_url): return st.session_state.apex_url
+    return ""
+
+def generate_simulated_live():
+    rows = []
+    ref = float(st.session_state.best_lap_pista)
+    for pos in range(1, 17):
+        kart = f"{pos:02d}"
+        lap = round(ref + random.uniform(-0.3, 2.2), 3)
+        rows.append({"KART": kart, "TIME": lap, "POS": pos})
+    return rows
+
+def init_state():
+    if "auth_status" not in st.session_state: st.session_state.auth_status = "guest"
+    if "team_data" not in st.session_state: st.session_state.team_data = {}
+    if "pista_nome" not in st.session_state: st.session_state.pista_nome = "Kartodromo 106"
+    if "best_lap_pista" not in st.session_state: st.session_state.best_lap_pista = 43.500
+    if "lap_green_threshold" not in st.session_state: st.session_state.lap_green_threshold = 43.800
+    if "lap_yellow_threshold" not in st.session_state: st.session_state.lap_yellow_threshold = 44.400
+    if "tempo_pit" not in st.session_state: st.session_state.tempo_pit = 180
+    if "corsie_attive" not in st.session_state: st.session_state.corsie_attive = LANE_OPTIONS.copy()
+    if "apex_url" not in st.session_state: st.session_state.apex_url = "https://live.apex-timing.com/kartodromo106reverse"
+    if "apex_api_url" not in st.session_state: st.session_state.apex_api_url = ""
+    if "apex_poll_seconds" not in st.session_state: st.session_state.apex_poll_seconds = 2
+    if "last_apex_fetch" not in st.session_state: st.session_state.last_apex_fetch = 0.0
+    if "apex_error" not in st.session_state: st.session_state.apex_error = ""
+    if "current_pit" not in st.session_state: st.session_state.current_pit = ""
+    if "last_update_text" not in st.session_state: st.session_state.last_update_text = "-"
+    if "live_karts" not in st.session_state: st.session_state.live_karts = generate_simulated_live()
+    if "lap_history" not in st.session_state: st.session_state.lap_history = []
+    if "sel_idx" not in st.session_state: st.session_state.sel_idx = 0
+    if "data" not in st.session_state:
+        st.
