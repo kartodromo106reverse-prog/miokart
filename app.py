@@ -1,117 +1,54 @@
-    /* Ingrandimento tabelle per dita grandi */
-    [data-testid="stDataEditor"] div div div div { line-height: 55px !important; font-size: 24px !important; }
-    </style>
-    """, unsafe_allow_html=True)
+import streamlit as st
+import pandas as pd
+import time
+import requests # Serve per "leggere" Apex in automatico
 
-# Logica conversione tempi
-def to_sec(t):
+# Configurazione Display
+st.set_page_config(page_title="WAR ROOM MONITOR", layout="wide")
+
+# --- RECUPERO DATI AUTOMATICO (ESEMPIO) ---
+def fetch_apex_data(api_url):
     try:
-        t = str(t).strip().replace(',', '.')
-        if ':' in t:
-            m, s = t.split(':')
-            return int(m) * 60 + float(s)
-        return float(t)
-    except: return 999.9
+        # Qui Cursor dovrà inserire il link JSON ufficiale della tua pista
+        response = requests.get(api_url)
+        data = response.json()
+        return data # Ritorna la classifica live
+    except:
+        return None
 
-# ==========================================
-# 3. NAVIGAZIONE (SIDEBAR)
-# ==========================================
-st.sidebar.title("🏁 STRATEGIA PRO")
-page = st.sidebar.radio("NAVIGAZIONE:", ["📡 RADAR PISTA", "🚧 GESTIONE BOX", "📊 ANALISI RECORD"])
+# --- INTERFACCIA A "BOTTONI" (TOUCH FRIENDLY) ---
+st.title("📱 Monitor Strategico Live")
 
-# ==========================================
-# 4. PAGINA 1: RADAR PISTA (50 KART)
-# ==========================================
-if page == "📡 RADAR PISTA":
-    st.title("📡 Radar Totale 50 Kart")
-    
-    # Tendina Piste Apex
-    circuiti = {
-        "106 Reverse": "https://live.apex-timing.com/kartodromo106reverse/",
-        "106 Standard": "https://live.apex-timing.com/kartodromo106/",
-        "Siena": "https://live.apex-timing.com/siena/",
-        "Mugellino": "https://live.apex-timing.com/mugellino/"
-    }
-    col_p, col_l = st.columns(2)
-    with col_p:
-        pista_scelta = st.selectbox("📍 SELEZIONA CIRCUITO:", list(circuiti.keys()))
-    with col_l:
-        st.link_button("🚀 APRI APEX LIVE", circuiti[pista_scelta])
+# Simuliamo i dati che arrivano da Apex
+if 'live_karts' not in st.session_state:
+    # Questa lista si aggiornerà da sola con l'API
+    st.session_state.live_karts = [
+        {"KART": "05", "TIME": "43.120", "POS": 1},
+        {"KART": "12", "TIME": "43.450", "POS": 2},
+        # ... altri kart
+    ]
 
-    st.divider()
-    
-    # Soglia Radar
-    target_radar = st.text_input("⭐ SOGLIA RECORD (Asterisco):", value="43.500")
-    t_val = to_sec(target_radar)
+st.subheader("⚡ Tocca un Kart per mandarlo ai Box o segnarlo")
 
-    # Editor Dati Principale
-    edited = st.data_editor(
-        st.session_state.data,
-        column_config={
-            "KART": st.column_config.TextColumn("KART", disabled=False),
-            "BEST": st.column_config.TextColumn("BEST LAP"),
-            "CATEGORIA": st.column_config.SelectboxColumn("CAT", options=["PRO", "GENTLEMAN"]),
-            "IN_PIT": st.column_config.CheckboxColumn("BOX"),
-            "CAMBI": st.column_config.NumberColumn("🔁", disabled=True),
-        },
-        hide_index=True, use_container_width=True, key="main_editor"
-    )
-    
-    # Sincronizzazione Logica (Cambi e Timer)
-    for i, row in edited.iterrows():
-        # Ingresso Box
-        if row['IN_PIT'] and not st.session_state.data.at[i, 'IN_PIT']:
-            st.session_state.data.at[i, 'PIT_START'] = time.time()
-        # Uscita Box
-        if not row['IN_PIT'] and st.session_state.data.at[i, 'IN_PIT']:
-            st.session_state.data.at[i, 'CAMBI'] += 1
-            st.session_state.data.at[i, 'PISTA_START'] = time.time()
-    
-    st.session_state.data = edited
+# Creiamo una griglia di pulsanti giganti basata sulla classifica LIVE
+karts = st.session_state.live_karts
+cols = st.columns(4) # 4 kart per riga, perfetti per l'iPhone
 
-# ==========================================
-# 5. PAGINA 2: GESTIONE BOX (CORSIA MULTIPLA)
-# ==========================================
-elif page == "🚧 GESTIONE BOX":
-    st.title("🚧 Strategia Corsie Box")
-    
-    num_corsie = st.slider("Numero corsie visualizzate:", 1, 4, 2)
-    in_pit = st.session_state.data[st.session_state.data['IN_PIT'] == True]
-    
-    if not in_pit.empty:
-        cols = st.columns(num_corsie)
-        for i, (idx, r) in enumerate(in_pit.iterrows()):
-            with cols[i % num_corsie]:
-                rimanente = 180 - (time.time() - r['PIT_START'])
-                st.markdown(f"### 🏎️ KART {r['KART']}")
-                if rimanente > 0:
-                    m, s = divmod(int(rimanente), 60)
-                    st.markdown(f"<p class='timer-red'>{m:02d}:{s:02d}</p>", unsafe_allow_html=True)
-                    if rimanente < 20: st.error("⚠️ PREPARA PILOTA!")
-                else:
-                    st.markdown("<p class='timer-green'>✅ ESCI ORA!</p>", unsafe_allow_html=True)
-                    st.balloons()
-    else:
-        st.info("Nessun kart ai box. Attiva la spunta 'BOX' nel Radar.")
+for i, k in enumerate(karts):
+    with cols[i % 4]:
+        # Il colore del bordo cambia se il tempo è sotto il target
+        label = f"KART {k['KART']}\n⏱️ {k['TIME']}"
+        
+        if st.button(label, key=f"btn_{k['KART']}"):
+            # AZIONE IMMEDIATA: Lo manda ai box o apre la sosta
+            st.session_state.current_pit = k['KART']
+            st.toast(f"Kart {k['KART']} selezionato!")
 
-# ==========================================
-# 6. PAGINA 3: ANALISI RECORD
-# ==========================================
-elif page == "📊 ANALISI RECORD":
-    st.title("📊 Classifica e Analisi Soste")
-    df_ana = st.session_state.data.copy()
-    df_ana['V_NUM'] = df_ana['BEST'].apply(to_sec)
-    
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("🏆 Migliori 10 Tempi")
-        st.dataframe(df_ana.sort_values('V_NUM')[['KART', 'BEST', 'CATEGORIA']].head(10))
-    with c2:
-        st.subheader("🔄 Soste per Kart")
-        st.bar_chart(df_ana.set_index('KART')['CAMBI'])
-
-# ==========================================
-# 7. REFRESH AUTOMATICO (INDISPENSABILE)
-# ==========================================
-time.sleep(1)
-st.rerun()
+# --- AREA BOX DINAMICA ---
+st.divider()
+st.subheader("🚧 Gestione Sosta Attiva")
+if 'current_pit' in st.session_state:
+    st.error(f"GESTIONE KART: {st.session_state.current_pit}")
+    if st.button("🏁 AVVIA TIMER 3 MIN"):
+        # Parte il countdown...
+        pass
