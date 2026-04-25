@@ -1,134 +1,216 @@
-import streamlit as st
-import pandas as pd
+import random
 import time
+from html import escape
+from statistics import mean
+import pandas as pd
+import requests
+import streamlit as st
+import streamlit.components.v1 as components
+from streamlit_autorefresh import st_autorefresh
 
-# ==========================================
-# 1. CONFIGURAZIONE E MEMORIA PERSISTENTE (Session State)
-# ==========================================
-st.set_page_config(page_title="WAR ROOM 106 - STABILE", layout="wide", initial_sidebar_state="expanded")
+# --- CONFIGURAZIONE PAGINA ---
+st.set_page_config(
+    page_title="WAR ROOM MONITOR - KARTING",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-# Inizializziamo il database solo se non esiste già, per non perdere i dati
-if 'data' not in st.session_state:
-    st.session_state.data = pd.DataFrame({
-        'KART': [f"{i+1:02d}" for i in range(50)],
-        'STATO': ['NEUTRO'] * 50,
-        'BEST': ["99.999"] * 50,
-        'CAMBI': [0] * 50,
-        'IN_PIT': [False] * 50,
-        'PIT_START': [0.0] * 50
-    })
-
-# Conserviamo la pagina corrente per non far saltare il menu
-if 'page' not in st.session_state:
-    st.session_state.page = "📡 RADAR PISTA"
-
-# ==========================================
-# 2. STILE GRAFICO (CSS)
-# ==========================================
-st.markdown("""
+# --- STILI CSS AVANZATI ---
+st.markdown(
+    """
     <style>
-    .main { background-color: #0e1117; }
-    .status-dot { height: 15px; width: 15px; border-radius: 50%; display: inline-block; margin-right: 8px; }
-    .dot-green { background-color: #00FF7F; box-shadow: 0 0 10px #00FF7F; }
-    .dot-red { background-color: #FF3131; box-shadow: 0 0 15px #FF3131; animation: blinker 1s linear infinite; }
-    @keyframes blinker { 50% { opacity: 0.3; } }
-    .timer-red { color: #ff4b4b; font-size: 50px; font-weight: bold; animation: blinker 1s linear infinite; text-align: center; background: black; border-radius: 12px; padding: 10px; border: 3px solid #ff4b4b; }
-    .timer-green { color: #00FF7F; font-size: 50px; font-weight: bold; text-align: center; border: 4px solid #00FF7F; background: black; border-radius: 12px; padding: 10px; }
-    .stButton>button { width: 100%; height: 70px; font-size: 20px !important; font-weight: bold; border-radius: 15px; }
-    [data-testid="stDataEditor"] div div div div { line-height: 50px !important; font-size: 22px !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-# ==========================================
-# 3. SIDEBAR E NAVIGAZIONE (Senza perdite)
-# ==========================================
-with st.sidebar:
-    st.title("🏁 MENU STRATEGIA")
-    # Usiamo il session_state per la navigazione
-    selection = st.radio("VAI A:", ["📡 RADAR PISTA", "🚧 GESTIONE BOX", "📊 ANALISI RECORD"], 
-                         index=["📡 RADAR PISTA", "🚧 GESTIONE BOX", "📊 ANALISI RECORD"].index(st.session_state.page))
-    st.session_state.page = selection
-
-# ==========================================
-# 4. PAGINA 1: RADAR (Inserimento e Monitoraggio)
-# ==========================================
-if st.session_state.page == "📡 RADAR PISTA":
-    st.title("📡 Radar Monitor Live")
+    .main .block-container { padding: 8px 12px !important; background-color: #0f1116; }
+    [data-testid="stVerticalBlock"] { gap: 0.5rem !important; }
     
-    circuiti = {
-        "106 Reverse": "https://live.apex-timing.com/kartodromo106reverse/",
-        "106 Standard": "https://live.apex-timing.com/kartodromo106/",
-        "Siena": "https://live.apex-timing.com/siena/"
+    /* Touch Cards */
+    .touch-card {
+        border: 2px solid #2f3640;
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 8px;
+        text-align: center;
+        transition: transform 0.1s;
     }
-    col_p, col_l = st.columns(2)
-    with col_p:
-        st.selectbox("📍 CIRCUITO APEX:", list(circuiti.keys()), key="pista_select")
-    with col_l:
-        st.link_button("🚀 APRI LIVE TIMING", circuiti[st.session_state.pista_select])
-
-    st.subheader("📋 Gestione Flotta (50 Kart)")
+    .touch-card:active { transform: scale(0.96); }
     
-    # Visualizziamo l'editor caricando i dati dalla sessione
-    edited_df = st.data_editor(
-        st.session_state.data,
-        column_config={
-            "KART": st.column_config.TextColumn("KART", disabled=True),
-            "STATO": st.column_config.SelectboxColumn("QUALITÀ", options=["TOP", "NEUTRO", "LENTO"]),
-            "BEST": st.column_config.TextColumn("MIGLIOR GIRO"),
-            "IN_PIT": st.column_config.CheckboxColumn("BOX"),
-            "CAMBI": st.column_config.NumberColumn("🔁 SOSTE", disabled=True),
-        },
-        hide_index=True, use_container_width=True, key="radar_editor"
-    )
+    .touch-fast { background: linear-gradient(135deg, #0f5132, #198754); border-color: #22c55e; }
+    .touch-mid { background: linear-gradient(135deg, #5c4a1f, #b08a26); border-color: #f59e0b; }
+    .touch-slow { background: linear-gradient(135deg, #6b1f1f, #bc2f2f); border-color: #ef4444; }
+    .touch-pit { background: linear-gradient(135deg, #1f3b6b, #3b82f6); border-color: #60a5fa; animation: pulse 2s infinite; }
+    
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
 
-    # LOGICA DI AGGIORNAMENTO: Confronto dati vecchi vs nuovi per non perdere nulla
-    for i in range(len(edited_df)):
-        # Se è appena entrato nel box
-        if edited_df.at[i, 'IN_PIT'] and not st.session_state.data.at[i, 'IN_PIT']:
-            edited_df.at[i, 'PIT_START'] = time.time()
-        # Se è appena uscito dal box
-        if not edited_df.at[i, 'IN_PIT'] and st.session_state.data.at[i, 'IN_PIT']:
-            edited_df.at[i, 'CAMBI'] += 1
+    .lane-title {
+        font-weight: 800;
+        text-align: center;
+        padding: 10px;
+        border-radius: 8px;
+        color: white;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+    }
+    .lane-verde { background: #146c43; }
+    .lane-rosso { background: #9b2226; }
+    .lane-giallo { background: #8c6d1f; }
+    .lane-blu { background: #2b59a2; }
+
+    .timer-critical { color: #ef4444; font-weight: 900; font-size: 1.4rem; }
+    .timer-ok { color: #22c55e; font-weight: 700; font-size: 1.2rem; }
+    
+    header, footer { visibility: hidden; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# --- COSTANTI ---
+LANE_OPTIONS = ["VERDE", "ROSSO", "GIALLO", "BLU"]
+CAT_OPTIONS = ["NONE", "PRO", "SEMI", "AMA"]
+
+# --- UTILS ---
+def _safe_float(value):
+    try:
+        return float(str(value).replace(",", ".")) if value is not None else None
+    except: return None
+
+def _safe_kart(value):
+    if not value: return None
+    raw = str(value).strip()
+    return raw.zfill(2) if raw.isdigit() else raw
+
+def _format_mmss(total_seconds):
+    mm, ss = divmod(max(0, int(total_seconds)), 60)
+    return f"{mm:02d}:{ss:02d}"
+
+# --- CORE LOGIC ---
+def init_state():
+    if "auth_status" not in st.session_state: st.session_state.auth_status = "guest"
+    if "data" not in st.session_state:
+        st.session_state.data = pd.DataFrame({
+            "KART": [f"{i+1:02d}" for i in range(50)],
+            "TEAM": ["-"] * 50,
+            "CAT": ["NONE"] * 50,
+            "ULTIMO": [0.0] * 50,
+            "MEDIA": [0.0] * 50,
+            "BEST": [999.0] * 50,
+            "LAPS": [0] * 50,
+            "IN_PIT": [False] * 50,
+            "LANE": ["VERDE"] * 50,
+            "PIT_START": [0.0] * 50,
+            "PIT_COUNT": [0] * 50,
+            "ALERT": ["N/A"] * 50
+        })
+    if "lap_history" not in st.session_state: st.session_state.lap_history = []
+    if "pista_nome" not in st.session_state: st.session_state.pista_nome = "Circuit"
+    if "best_lap_pista" not in st.session_state: st.session_state.best_lap_pista = 45.0
+    if "lap_green_threshold" not in st.session_state: st.session_state.lap_green_threshold = 45.5
+    if "lap_yellow_threshold" not in st.session_state: st.session_state.lap_yellow_threshold = 46.5
+    if "tempo_pit" not in st.session_state: st.session_state.tempo_pit = 180
+    if "corsie_attive" not in st.session_state: st.session_state.corsie_attive = ["VERDE"]
+    if "apex_url" not in st.session_state: st.session_state.apex_url = ""
+    if "live_karts" not in st.session_state: st.session_state.live_karts = []
+
+def sync_data(live_list):
+    now = time.time()
+    for item in live_list:
+        k = _safe_kart(item['KART'])
+        t = _safe_float(item['TIME'])
+        mask = st.session_state.data["KART"] == k
+        if mask.any() and t:
+            idx = st.session_state.data[mask].index[0]
+            if st.session_state.data.at[idx, "IN_PIT"]: continue
             
-    st.session_state.data = edited_df
+            # Aggiornamento statistiche
+            old_avg = st.session_state.data.at[idx, "MEDIA"]
+            st.session_state.data.at[idx, "ULTIMO"] = t
+            st.session_state.data.at[idx, "MEDIA"] = t if old_avg == 0 else (old_avg * 0.8 + t * 0.2)
+            st.session_state.data.at[idx, "BEST"] = min(st.session_state.data.at[idx, "BEST"], t)
+            st.session_state.data.at[idx, "LAPS"] += 1
+            
+            # Alert
+            if t <= st.session_state.lap_green_threshold: alert = "FAST"
+            elif t <= st.session_state.lap_yellow_threshold: alert = "MID"
+            else: alert = "SLOW"
+            st.session_state.data.at[idx, "ALERT"] = alert
+            
+            # History (limitata a 1000 per performance)
+            st.session_state.lap_history.append({"KART": k, "TIME": t, "TS": now})
+            if len(st.session_state.lap_history) > 1000: st.session_state.lap_history.pop(0)
 
-# ==========================================
-# 5. PAGINA 2: GESTIONE BOX (Countdown Real-Time)
-# ==========================================
-elif st.session_state.page == "🚧 GESTIONE BOX":
-    st.title("🚧 Gestione Soste & Sorteggi")
+# --- UI COMPONENTS ---
+def render_login():
+    st.title("🛡️ STRATEGY HUB LOGIN")
+    with st.form("login"):
+        team = st.text_input("Nome Team")
+        kart = st.text_input("Kart ID")
+        if st.form_submit_button("ACCEDI"):
+            st.session_state.auth_status = "team"
+            st.session_state.team_name = team
+            st.rerun()
+
+def render_war_room():
+    st_autorefresh(interval=2000, key="global_refresh")
     
-    # Filtriamo i kart che sono ai box
-    in_pit = st.session_state.data[st.session_state.data['IN_PIT'] == True]
+    # Sidebar per controlli rapidi
+    with st.sidebar:
+        st.header("⚙️ Settings")
+        st.session_state.best_lap_pista = st.number_input("Rif. Pista", value=st.session_state.best_lap_pista)
+        st.session_state.tempo_pit = st.number_input("Tempo Pit (sec)", value=st.session_state.tempo_pit)
+        st.session_state.corsie_attive = st.multiselect("Corsie Box", LANE_OPTIONS, default=st.session_state.corsie_attive)
+        if st.button("RESET DATI"):
+            st.session_state.data["LAPS"] = 0
+            st.rerun()
+
+    t1, t2, t3 = st.tabs(["🏎️ LIVE TRACK", "🚧 PIT BOARD", "📊 ANALYTICS"])
     
-    if not in_pit.empty:
-        # Layout a corsie dinamiche
-        cols_box = st.columns(2)
-        for i, (idx, r) in enumerate(in_pit.iterrows()):
-            with cols_box[i % 2]:
-                trascorso = time.time() - r['PIT_START']
-                rimanente = 180 - trascorso # 3 minuti
-                
-                colore_kart = "#00FF7F" if r['STATO'] == "TOP" else "white"
-                st.markdown(f"### <span style='color:{colore_kart};'>🏎️ KART {r['KART']}</span> ({r['STATO']})", unsafe_allow_html=True)
+    with t1:
+        # Simulazione o API Apex (Qui puoi inserire la tua fetch_apex_data)
+        # Per ora usiamo una simulazione per test immediato
+        sim_data = [{"KART": f"{i+1:02d}", "TIME": round(st.session_state.best_lap_pista + random.uniform(0, 2), 3)} for i in range(12)]
+        sync_data(sim_data)
+        
+        cols = st.columns(4)
+        for i, row in enumerate(sim_data):
+            k_id = row['KART']
+            k_time = row['TIME']
+            with cols[i % 4]:
+                style = "touch-fast" if k_time <= st.session_state.lap_green_threshold else "touch-slow"
+                st.markdown(f"<div class='touch-card {style}'><b>KART {k_id}</b><br>{k_time:.3f}s</div>", unsafe_allow_html=True)
+                if st.button(f"BOX {k_id}", key=f"btn_{k_id}"):
+                    idx = st.session_state.data[st.session_state.data["KART"] == k_id].index[0]
+                    st.session_state.data.at[idx, "IN_PIT"] = True
+                    st.session_state.data.at[idx, "PIT_START"] = time.time()
+                    st.rerun()
 
-                if rimanente > 0:
-                    m, s = divmod(int(rimanente), 60)
-                    st.markdown(f"<p class='timer-red'>{m:02d}:{s:02d}</p>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<p class='timer-green'>✅ ESCI!</p>", unsafe_allow_html=True)
-    else:
-        st.info("Nessun kart ai box. Spunta 'BOX' nella pagina Radar.")
+    with t2:
+        st.subheader("Gestione Corsie")
+        p_cols = st.columns(len(st.session_state.corsie_attive))
+        for i, lane in enumerate(st.session_state.corsie_attive):
+            with p_cols[i]:
+                st.markdown(f"<div class='lane-title lane-{lane.lower()}'>{lane}</div>", unsafe_allow_html=True)
+                pit_karts = st.session_state.data[st.session_state.data["IN_PIT"] == True]
+                for idx, r in pit_karts.iterrows():
+                    elapsed = time.time() - r["PIT_START"]
+                    rem = st.session_state.tempo_pit - elapsed
+                    color = "timer-critical" if rem < 30 else "timer-ok"
+                    st.markdown(f"**KART {r['KART']}**")
+                    st.markdown(f"<span class='{color}'>{_format_mmss(rem)}</span>", unsafe_allow_html=True)
+                    if st.button(f"RELEASE {r['KART']}", key=f"rel_{idx}"):
+                        st.session_state.data.at[idx, "IN_PIT"] = False
+                        st.session_state.data.at[idx, "PIT_COUNT"] += 1
+                        st.rerun()
+                    st.divider()
 
-# ==========================================
-# 6. PAGINA 3: ANALISI
-# ==========================================
-elif st.session_state.page == "📊 ANALISI RECORD":
-    st.title("📊 Classifica Gara")
-    st.dataframe(st.session_state.data.sort_values('BEST'), use_container_width=True)
+    with t3:
+        st.dataframe(st.session_state.data[st.session_state.data["LAPS"] > 0].sort_values("BEST"), use_container_width=True)
 
-# ==========================================
-# 7. AGGIORNAMENTO AUTOMATICO (Indispensabile per i secondi)
-# ==========================================
-time.sleep(1)
-st.rerun()
+# --- RUN ---
+init_state()
+if st.session_state.auth_status == "guest":
+    render_login()
+else:
+    render_war_room()
