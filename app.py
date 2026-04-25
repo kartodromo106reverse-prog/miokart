@@ -15,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# --- CSS ORIGINALE ---
+# --- STILI CSS ---
 st.markdown(
     """
     <style>
@@ -32,6 +32,7 @@ st.markdown(
         border-radius: 10px;
         padding: 8px;
         margin-bottom: 6px;
+        text-align: center;
     }
     .touch-fast { background: linear-gradient(135deg, #0f5132, #146c43); }
     .touch-mid { background: linear-gradient(135deg, #5c4a1f, #8c6d1f); }
@@ -42,15 +43,15 @@ st.markdown(
         background: #141923;
         border-radius: 10px;
         padding: 8px 10px;
+        text-align: center;
     }
-    .small-muted { color: #9ca3af; font-size: 12px; }
     .lane-title {
         font-weight: 800;
-        letter-spacing: 0.5px;
         text-align: center;
         padding: 6px;
         border-radius: 8px;
         color: white;
+        margin-bottom: 10px;
     }
     .lane-verde { background: #146c43; }
     .lane-rosso { background: #9b2226; }
@@ -58,104 +59,130 @@ st.markdown(
     .lane-blu { background: #2b59a2; }
     .alert-ok { color: #22c55e; font-weight: 700; }
     .alert-warn { color: #f59e0b; font-weight: 700; }
-    .alert-danger { color: #ef4444; font-weight: 700; }
+    .alert-danger { color: #ef4444; font-weight: 700; animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0.3; } }
     header, footer { visibility: hidden; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+# --- COSTANTI ---
 LANE_OPTIONS = ["VERDE", "ROSSO", "GIALLO", "BLU"]
 CAT_OPTIONS = ["NONE", "PRO", "SEMI", "AMA"]
 
+# --- FUNZIONI UTILI ---
 def _safe_float(value):
     try:
         if value is None: return None
         return float(str(value).replace(",", "."))
-    except (TypeError, ValueError): return None
+    except: return None
 
 def _safe_kart(value):
     if value is None: return None
     raw = str(value).strip()
-    if not raw: return None
     return raw.zfill(2) if raw.isdigit() else raw
 
 def _format_mmss(total_seconds):
-    rem = max(0, int(total_seconds))
-    mm, ss = divmod(rem, 60)
+    mm, ss = divmod(max(0, int(total_seconds)), 60)
     return f"{mm:02d}:{ss:02d}"
 
-def _lane_css_class(lane):
-    lane_lower = str(lane).strip().lower()
-    if lane_lower == "verde": return "lane-verde"
-    if lane_lower == "rosso": return "lane-rosso"
-    if lane_lower == "giallo": return "lane-giallo"
-    return "lane-blu"
-
-def fetch_apex_data(api_url):
-    if not api_url: return None
-    try:
-        response = requests.get(api_url, timeout=4)
-        response.raise_for_status()
-        return response.json()
-    except (requests.RequestException, ValueError): return None
-
-def parse_apex_live_karts(payload):
-    if payload is None: return []
-    if isinstance(payload, list):
-        candidates = payload
-    elif isinstance(payload, dict):
-        candidates = (
-            payload.get("karts") or payload.get("drivers") or payload.get("results") or 
-            payload.get("classification") or payload.get("entries") or payload.get("data") or []
-        )
-    else: candidates = []
-    if not isinstance(candidates, list): return []
-    live = []
-    for pos, item in enumerate(candidates, start=1):
-        if not isinstance(item, dict): continue
-        kart = _safe_kart(item.get("kart") or item.get("kartNumber") or item.get("number") or item.get("vehicleNumber") or item.get("transponder") or item.get("name"))
-        lap = _safe_float(item.get("lastLap") or item.get("last_lap") or item.get("lapTime") or item.get("bestLap") or item.get("best_lap") or item.get("time"))
-        rank = item.get("position") or item.get("pos") or pos
-        if not kart or lap is None: continue
-        live.append({"KART": kart, "TIME": lap, "POS": int(rank)})
-    live.sort(key=lambda x: (x["POS"], x["TIME"]))
-    return live
-
-def resolve_apex_feed_url():
-    api_url = str(st.session_state.apex_api_url).strip()
-    if api_url: return api_url
-    live_url = str(st.session_state.apex_url).strip().lower()
-    if live_url and (".json" in live_url or "/api/" in live_url): return st.session_state.apex_url
-    return ""
-
-def generate_simulated_live():
-    rows = []
-    ref = float(st.session_state.best_lap_pista)
-    for pos in range(1, 17):
-        kart = f"{pos:02d}"
-        lap = round(ref + random.uniform(-0.3, 2.2), 3)
-        rows.append({"KART": kart, "TIME": lap, "POS": pos})
-    return rows
-
+# --- STATO SESSIONE ---
 def init_state():
     if "auth_status" not in st.session_state: st.session_state.auth_status = "guest"
-    if "team_data" not in st.session_state: st.session_state.team_data = {}
     if "pista_nome" not in st.session_state: st.session_state.pista_nome = "Kartodromo 106"
     if "best_lap_pista" not in st.session_state: st.session_state.best_lap_pista = 43.500
     if "lap_green_threshold" not in st.session_state: st.session_state.lap_green_threshold = 43.800
     if "lap_yellow_threshold" not in st.session_state: st.session_state.lap_yellow_threshold = 44.400
     if "tempo_pit" not in st.session_state: st.session_state.tempo_pit = 180
     if "corsie_attive" not in st.session_state: st.session_state.corsie_attive = LANE_OPTIONS.copy()
-    if "apex_url" not in st.session_state: st.session_state.apex_url = "https://live.apex-timing.com/kartodromo106reverse"
-    if "apex_api_url" not in st.session_state: st.session_state.apex_api_url = ""
-    if "apex_poll_seconds" not in st.session_state: st.session_state.apex_poll_seconds = 2
-    if "last_apex_fetch" not in st.session_state: st.session_state.last_apex_fetch = 0.0
-    if "apex_error" not in st.session_state: st.session_state.apex_error = ""
-    if "current_pit" not in st.session_state: st.session_state.current_pit = ""
-    if "last_update_text" not in st.session_state: st.session_state.last_update_text = "-"
-    if "live_karts" not in st.session_state: st.session_state.live_karts = generate_simulated_live()
-    if "lap_history" not in st.session_state: st.session_state.lap_history = []
-    if "sel_idx" not in st.session_state: st.session_state.sel_idx = 0
     if "data" not in st.session_state:
-        st.
+        st.session_state.data = pd.DataFrame({
+            "KART": [f"{i + 1:02d}" for i in range(50)],
+            "TEAM": [f"T{i + 1}" for i in range(50)],
+            "CAT": ["NONE"] * 50,
+            "ULTIMO": [0.0] * 50,
+            "MEDIA": [0.0] * 50,
+            "BEST": [999.0] * 50,
+            "LAPS": [0] * 50,
+            "IN_PIT": [False] * 50,
+            "LANE": ["VERDE"] * 50,
+            "PIT_START": [0.0] * 50,
+            "PIT_COUNT": [0] * 50,
+            "ALERT": ["N/A"] * 50,
+        })
+
+# --- AZIONI ---
+def send_to_box(kart_id, lane="VERDE"):
+    mask = st.session_state.data["KART"] == _safe_kart(kart_id)
+    if mask.any():
+        idx = st.session_state.data[mask].index[0]
+        st.session_state.data.at[idx, "IN_PIT"] = True
+        st.session_state.data.at[idx, "LANE"] = lane
+        st.session_state.data.at[idx, "PIT_START"] = time.time()
+        st.session_state.data.at[idx, "PIT_COUNT"] += 1
+
+def release_from_box(idx):
+    st.session_state.data.at[idx, "IN_PIT"] = False
+
+# --- COMPONENTI UI ---
+def render_live_tab():
+    st.subheader("🏎️ Live Timing Touch")
+    # Griglia per i pulsanti dei Kart
+    cols = st.columns(4)
+    for i in range(16):
+        k_id = f"{i+1:02d}"
+        mask = st.session_state.data["KART"] == k_id
+        in_pit = st.session_state.data[mask]["IN_PIT"].iloc[0] if mask.any() else False
+        
+        with cols[i % 4]:
+            if in_pit:
+                st.markdown(f"<div class='touch-card touch-pit'>KART {k_id}<br>AI BOX</div>", unsafe_allow_html=True)
+                st.button(f"SBLOCCA {k_id}", key=f"unl_{k_id}", on_click=release_from_box, args=(st.session_state.data[mask].index[0],))
+            else:
+                st.markdown(f"<div class='touch-card touch-fast'>KART {k_id}<br>IN PISTA</div>", unsafe_allow_html=True)
+                if st.button(f"BOX {k_id}", key=f"box_{k_id}"):
+                    send_to_box(k_id)
+                    st.rerun()
+
+def render_box_tab():
+    st.subheader("🚧 GESTIONE BOX")
+    lanes = st.session_state.corsie_attive
+    cols = st.columns(len(lanes))
+    for i, lane in enumerate(lanes):
+        with cols[i]:
+            st.markdown(f"<div class='lane-title lane-{lane.lower()}'>CORSIA {lane}</div>", unsafe_allow_html=True)
+            in_lane = st.session_state.data[(st.session_state.data["IN_PIT"] == True) & (st.session_state.data["LANE"] == lane)]
+            for idx, row in in_lane.iterrows():
+                elapsed = int(time.time() - row["PIT_START"])
+                rem = st.session_state.tempo_pit - elapsed
+                color = "alert-danger" if rem < 30 else "alert-ok"
+                st.markdown(f"**K{row['KART']}** | <span class='{color}'>{_format_mmss(rem)}</span>", unsafe_allow_html=True)
+                if st.button(f"RELEASE K{row['KART']}", key=f"rel_{idx}"):
+                    release_from_box(idx)
+                    st.rerun()
+                st.divider()
+
+def render_war_room():
+    st_autorefresh(interval=2000, key="refresh")
+    with st.sidebar:
+        st.header("⚙️ Config")
+        st.session_state.tempo_pit = st.number_input("Tempo Pit (sec)", value=st.session_state.tempo_pit)
+        st.session_state.corsie_attive = st.multiselect("Corsie Box", LANE_OPTIONS, default=st.session_state.corsie_attive)
+        if st.button("RESET GARA"):
+            st.session_state.data["IN_PIT"] = False
+            st.rerun()
+
+    t1, t2 = st.tabs(["🏎️ LIVE TIMING", "🚧 GESTIONE BOX"])
+    with t1: render_live_tab()
+    with t2: render_box_tab()
+
+# --- MAIN ---
+init_state()
+if st.session_state.auth_status == "guest":
+    st.title("🛡️ Accesso War Room")
+    if st.button("ENTRA"):
+        st.session_state.auth_status = "team"
+        st.rerun()
+else:
+    render_war_room()
