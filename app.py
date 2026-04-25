@@ -213,4 +213,4 @@ init_state()
 if st.session_state.auth_status == "guest":
     render_login()
 else:
-    render_war_room()
+    render_war_room() Correggi.
