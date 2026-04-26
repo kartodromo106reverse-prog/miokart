@@ -1,136 +1,122 @@
-import random
 import time
 import pandas as pd
-import requests
 import streamlit as st
-import streamlit.components.v1 as components
 from streamlit_autorefresh import st_autorefresh
+import streamlit.components.v1 as components
 
-# --- CONFIGURAZIONE PAGINA ---
-st.set_page_config(
-    page_title="WAR ROOM PRO - APEX",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# --- CONFIGURAZIONE ---
+st.set_page_config(page_title="WAR ROOM - GARA LIVE", layout="wide")
 
-# --- CSS CUSTOM ---
-st.markdown(
-    """
+# --- CSS PROFESSIONALE ---
+st.markdown("""
     <style>
-    .main .block-container { padding: 8px 12px !important; background-color: #0f1116; }
-    .stButton > button { width: 100% !important; border-radius: 8px !important; font-weight: 700; }
-    .lane-title { font-weight: 800; text-align: center; padding: 6px; border-radius: 8px; color: white; margin-bottom: 10px; }
-    .lane-verde { background: #146c43; }
-    .lane-rosso { background: #9b2226; }
-    .lane-giallo { background: #8c6d1f; color: #fff; }
-    .lane-blu { background: #2b59a2; }
-    .kpi-card { background: #1c2128; border: 1px solid #30363d; border-radius: 8px; padding: 10px; text-align: center; }
-    .leader-row { border-bottom: 1px solid #30363d; padding: 5px 0; font-family: monospace; }
+    .main { background-color: #0f1116; }
+    .stButton>button { width: 100%; border-radius: 8px; font-weight: bold; height: 3em; }
+    .lane-title { text-align: center; padding: 8px; border-radius: 8px; color: white; font-weight: 800; margin-bottom: 10px; }
+    .lane-verde { background-color: #146c43; }
+    .lane-rosso { background-color: #9b2226; }
+    .lane-giallo { background-color: #8c6d1f; }
+    .lane-blu { background-color: #2b59a2; }
+    .box-card { background: #1c2128; border: 1px solid #30363d; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
     header, footer { visibility: hidden; }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
-# --- COSTANTI ---
-LANE_OPTIONS = ["VERDE", "ROSSO", "GIALLO", "BLU"]
-
-# --- FUNZIONI UTILI ---
-def _format_mmss(total_seconds):
-    mm, ss = divmod(max(0, int(total_seconds)), 60)
-    return f"{mm:02d}:{ss:02d}"
-
-# --- INIZIALIZZAZIONE SESSIONE ---
-if "data" not in st.session_state:
+# --- INIZIALIZZAZIONE DATI ---
+if 'data' not in st.session_state:
     st.session_state.data = pd.DataFrame({
-        "KART": [f"{i+1:02d}" for i in range(50)],
-        "TEAM": ["-"] * 50,
-        "ULTIMO": [0.0] * 50,
-        "BEST": [999.0] * 50,
-        "IN_PIT": [False] * 50,
-        "LANE": ["VERDE"] * 50,
-        "PIT_START": [0.0] * 50
+        'KART': [f"{i+1:02d}" for i in range(30)],
+        'TEAM': ["-"] * 30,
+        'BEST': [99.999] * 30,
+        'IN_PIT': [False] * 30,
+        'PIT_START': [0.0] * 30,
+        'LANE': ["VERDE"] * 30
     })
 
-if "apex_url" not in st.session_state:
-    st.session_state.apex_url = "https://live.apex-timing.com/kartodromo106"
+if 'target_pit' not in st.session_state:
+    st.session_state.target_pit = 180
 
-if "tempo_pit" not in st.session_state:
-    st.session_state.tempo_pit = 180
+if 'url_apex' not in st.session_state:
+    st.session_state.url_apex = "https://live.apex-timing.com"
 
-# --- REFRESH ---
-st_autorefresh(interval=2000, key="global_refresh")
+# REFRESH OGNI 2 SECONDI
+st_autorefresh(interval=2000, key="refresh")
 
-# --- SIDEBAR (MODIFICA MANUALE DATI) ---
+# --- SIDEBAR: MODIFICA MANUALE ---
 with st.sidebar:
-    st.header("🛠️ Configurazione")
-    st.session_state.apex_url = st.text_input("Link Apex Timing", st.session_state.apex_url)
-    st.session_state.tempo_pit = st.number_input("Tempo Pit (sec)", value=st.session_state.tempo_pit)
+    st.header("⚙️ SETTINGS GARA")
+    st.session_state.url_apex = st.text_input("Link Apex Timing", st.session_state.url_apex)
+    st.session_state.target_pit = st.number_input("Target Pit (sec)", value=st.session_state.target_pit)
     
     st.divider()
-    st.subheader("📝 Modifica Kart Manuale")
-    idx_sel = st.selectbox("Seleziona Kart da modificare", options=st.session_state.data.index, 
-                           format_func=lambda x: f"Kart {st.session_state.data.at[x, 'KART']}")
+    st.subheader("📝 EDIT KART / TEAM")
+    sel_idx = st.selectbox("Seleziona Riga", options=range(30), format_func=lambda x: f"Riga {x+1} (K{st.session_state.data.at[x, 'KART']})")
     
-    new_kart_no = st.text_input("Cambia Numero Kart", st.session_state.data.at[idx_sel, "KART"])
-    new_team_name = st.text_input("Nome Team", st.session_state.data.at[idx_sel, "TEAM"])
+    new_k = st.text_input("Cambia Numero Kart", st.session_state.data.at[sel_idx, 'KART'])
+    new_t = st.text_input("Cambia Nome Team", st.session_state.data.at[sel_idx, 'TEAM'])
     
-    if st.button("Aggiorna Dati Kart"):
-        st.session_state.data.at[idx_sel, "KART"] = new_kart_no
-        st.session_state.data.at[idx_sel, "TEAM"] = new_team_name
-        st.success("Aggiornato!")
+    if st.button("SALVA MODIFICHE"):
+        st.session_state.data.at[sel_idx, 'KART'] = new_k
+        st.session_state.data.at[sel_idx, 'TEAM'] = new_t
+        st.rerun()
 
-# --- MAIN LAYOUT ---
-t1, t2, t3 = st.tabs(["📊 DASHBOARD & TOP 15", "🚧 GESTIONE BOX", "🌐 LIVE APEX"])
+# --- TAB PRINCIPALI ---
+tab_pista, tab_box, tab_apex = st.tabs(["🏎️ LEADERBOARD & PISTA", "🚧 GESTIONE BOX", "🌐 APEX LIVE"])
 
-with t1:
-    c1, c2 = st.columns([1, 2])
+with tab_pista:
+    col_classifica, col_azioni = st.columns([1.2, 2])
     
-    with c1:
-        st.subheader("🏆 Top 15 Leaderboard")
-        # Simulazione calcolo veloci (qui andrebbe il parsing Apex se avessi API)
-        leaderboard = st.session_state.data.sort_values("BEST").head(15)
-        for i, (idx, r) in enumerate(leaderboard.iterrows()):
-            st.markdown(f"""<div class='leader-row'>
-            <b>{i+1}°</b> KART {r['KART']} - {r['TEAM']} | ⏱️ {r['BEST'] if r['BEST'] < 900 else '--.--'}
-            </div>""", unsafe_allow_html=True)
+    with col_classifica:
+        st.subheader("🏆 TOP 15 (Migliori Tempi)")
+        # Ordina per il tempo BEST inserito
+        top15 = st.session_state.data.sort_values('BEST').head(15)
+        for i, (idx, r) in enumerate(top15.iterrows()):
+            t_col1, t_col2 = st.columns([2, 1])
+            with t_col1:
+                # Campo per inserire il tempo manualmente per ogni kart
+                new_time = st.number_input(f"{i+1}° K{r['KART']}", value=float(r['BEST']), format="%.3f", key=f"time_{idx}")
+                if new_time != r['BEST']:
+                    st.session_state.data.at[idx, 'BEST'] = new_time
+                    st.rerun()
+            with t_col2:
+                st.write(f"Pos: {i+1}")
 
-    with c2:
-        st.subheader("⚡ Azioni Rapide")
-        # Griglia per mandare i kart ai box
-        k_cols = st.columns(4)
-        for i in range(16): # Mostra i primi 16 per velocità d'uso
-            k_id = st.session_state.data.at[i, "KART"]
-            is_pit = st.session_state.data.at[i, "IN_PIT"]
-            with k_cols[i % 4]:
-                if not is_pit:
-                    if st.button(f"📥 BOX {k_id}", key=f"quick_box_{i}"):
-                        st.session_state.data.at[i, "IN_PIT"] = True
-                        st.session_state.data.at[i, "PIT_START"] = time.time()
+    with col_azioni:
+        st.subheader("📥 CHIAMA AL BOX")
+        grid = st.columns(3)
+        for i in range(15):
+            kart_id = st.session_state.data.at[i, 'KART']
+            with grid[i % 3]:
+                if not st.session_state.data.at[i, 'IN_PIT']:
+                    c_sel = st.selectbox(f"Corsia", ["VERDE", "ROSSO", "GIALLO", "BLU"], key=f"c_{i}")
+                    if st.button(f"ENTRA K{kart_id}", key=f"in_{i}"):
+                        st.session_state.data.at[i, 'IN_PIT'] = True
+                        st.session_state.data.at[i, 'LANE'] = c_sel
+                        st.session_state.data.at[i, 'PIT_START'] = time.time()
                         st.rerun()
                 else:
-                    st.button(f"⏳ K{k_id} BOX", disabled=True, key=f"dis_{i}")
+                    st.error(f"K{kart_id} BOX")
 
-with t2:
-    st.subheader("🚧 Monitor Corsie")
-    l_cols = st.columns(4)
-    for i, lane in enumerate(LANE_OPTIONS):
-        with l_cols[i]:
-            st.markdown(f"<div class='lane-title lane-{lane.lower()}'>{lane}</div>", unsafe_allow_html=True)
-            karts_in_lane = st.session_state.data[(st.session_state.data["IN_PIT"] == True) & (st.session_state.data["LANE"] == lane)]
-            for idx, r in karts_in_lane.iterrows():
-                elapsed = int(time.time() - r["PIT_START"])
-                rem = st.session_state.tempo_pit - elapsed
-                st.write(f"**KART {r['KART']}**")
-                st.write(f"Mancano: **{_format_mmss(rem)}**")
+with tab_box:
+    st.subheader("🚧 MONITOR CORSIE")
+    b_cols = st.columns(4)
+    lanes = ["VERDE", "ROSSO", "GIALLO", "BLU"]
+    for i, l_name in enumerate(lanes):
+        with b_cols[i]:
+            st.markdown(f"<div class='lane-title lane-{l_name.lower()}'>{l_name}</div>", unsafe_allow_html=True)
+            k_in_box = st.session_state.data[(st.session_state.data['IN_PIT'] == True) & (st.session_state.data['LANE'] == l_name)]
+            for idx, r in k_in_box.iterrows():
+                elapsed = int(time.time() - r['PIT_START'])
+                rem = st.session_state.target_pit - elapsed
+                st.markdown(f"""<div class='box-card'>
+                    <b>KART {r['KART']}</b><br>
+                    Mancano: <span style='color:{"#ff4b4b" if rem < 30 else "#00eb93"}; font-size:20px;'>{rem}s</span>
+                </div>""", unsafe_allow_html=True)
                 if st.button(f"RILASCIA {r['KART']}", key=f"rel_{idx}"):
-                    st.session_state.data.at[idx, "IN_PIT"] = False
+                    st.session_state.data.at[idx, 'IN_PIT'] = False
                     st.rerun()
-                st.divider()
 
-with t3:
-    st.subheader("🌐 Apex Live Timing")
-    if st.session_state.apex_url:
-        components.html(f'<iframe src="{st.session_state.apex_url}" width="100%" height="800" style="border:none;"></iframe>', height=800)
-    else:
-        st.warning("Inserisci un link Apex nella sidebar.")
+with tab_apex:
+    st.subheader("🌐 APEX LIVE TIMING")
+    st.markdown(f"[CLICCA QUI PER APRIRE APEX IN UNA NUOVA SCHEDA]({st.session_state.url_apex})")
+    components.html(f'<iframe src="{st.session_state.url_apex}" width="100%" height="800" style="border:none;"></iframe>', height=800)
